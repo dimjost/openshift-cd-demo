@@ -110,6 +110,12 @@ objects:
                   step([$class: 'JUnitResultArchiver', testResults: '**/target/surefire-reports/TEST-*.xml'])
                 }
               }
+              stage('OWASP-Test') {
+                steps {
+                  sh "${mvnCmd} org.owasp:dependency-check-maven:aggregate -Dformat=XML"
+                  step([$class: 'DependencyCheckPublisher', unstableTotalAll: '-1'])
+                }
+              }
               stage('Sonar') {
                 steps {
                   script {
