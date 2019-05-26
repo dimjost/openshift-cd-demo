@@ -112,7 +112,7 @@ objects:
               }
               stage('OWASP-Test') {
                 steps {
-                  sh "${mvnCmd} org.owasp:dependency-check-maven:aggregate -Dformat=XML"
+                  sh "${mvnCmd} org.owasp:dependency-check-maven:5.0.0-M2:aggregate -Dformat=XML -DcentralAnalyzerEnabled=true -Danalyzer.bundle.audit.enabled=true"
                   step([$class: 'DependencyCheckPublisher', unstableTotalAll: '-1'])
                 }
               }
