@@ -288,7 +288,7 @@ objects:
           - -c
           - |           
             # adjust jenkins 
-            oc set resources dc/jenkins --limits=cpu=2,memory=2Gi --requests=cpu=100m,memory=512Mi 
+            oc set resources dc/jenkins --limits=cpu=2,memory=2Gi --requests=cpu=100m,memory=512Mi -e INSTALL_PLUGINS=dependency-check-jenkins-plugin:4.0.2
             oc label dc jenkins app=jenkins --overwrite 
 
             # setup dev env
