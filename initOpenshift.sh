@@ -22,3 +22,6 @@ oc policy add-role-to-group edit system:serviceaccounts:cicd -n stage
 
 echo "Setup Projects by Template"
 oc new-app -n cicd -f https://raw.githubusercontent.com/dimjost/openshift-cd-demo/ocp-3.11/cicd-template.yaml
+
+echo "Setup Pipeline"
+oc new-app -n cicd -f https://raw.githubusercontent.com/dimjost/openshift-cd-demo/ocp-3.11/pipeline.yaml

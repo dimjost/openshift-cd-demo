@@ -60,133 +60,7 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: default
-# Pipeline
-- apiVersion: v1
-  kind: BuildConfig
-  metadata:
-    annotations:
-      pipeline.alpha.openshift.io/uses: '[{"name": "jenkins", "namespace": "", "kind": "DeploymentConfig"}]'
-    labels:
-      app: cicd-pipeline
-      name: cicd-pipeline
-    name: tasks-pipeline
-  spec:
-    triggers:
-      - type: GitHub
-        github:
-          secret: ${WEBHOOK_SECRET}
-      - type: Generic
-        generic:
-          secret: ${WEBHOOK_SECRET}
-    runPolicy: Serial
-    source:
-      type: None
-    strategy:
-      jenkinsPipelineStrategy:
-        env:
-        - name: DEV_PROJECT
-          value: ${DEV_PROJECT}
-        - name: STAGE_PROJECT
-          value: ${STAGE_PROJECT}
-        - name: ENABLE_QUAY
-          value: ${ENABLE_QUAY}
-        jenkinsfile: |-
-          def mvnCmd = "mvn -s configuration/cicd-settings-nexus3.xml"
-
-          pipeline {
-            agent {
-              label 'maven'
-            }
-            stages {
-              stage('Build App') {
-                steps {
-                  git branch: 'eap-7', url: 'http://gogs:3000/gogs/openshift-tasks.git'
-                  sh "${mvnCmd} install -DskipTests=true"
-                }
-              }
-              stage('jUnit-Test') {
-                steps {
-                  sh "${mvnCmd} test"
-                  step([$class: 'JUnitResultArchiver', testResults: '**/target/surefire-reports/TEST-*.xml'])
-                }
-              }
-              stage('OWASP-Test') {
-                steps {
-                  sh "${mvnCmd} org.owasp:dependency-check-maven:5.0.0-M2:aggregate -Dformat=XML -DcentralAnalyzerEnabled=true -Danalyzer.bundle.audit.enabled=true"
-                  step([$class: 'DependencyCheckPublisher', unstableTotalAll: '-1'])
-                }
-              }
-              stage('Sonar') {
-                steps {
-                  script {
-                    sh "${mvnCmd} sonar:sonar -Dsonar.host.url=http://sonarqube:9000 -DskipTests=true"
-                  }
-                }
-              }
-              stage('Deploy') {
-                steps {
-                  sh "${mvnCmd} deploy -DskipTests=true -P nexus3"
-                }
-              }
-              stage('Build Image') {
-                steps {
-                  sh "cp target/openshift-tasks.war target/ROOT.war"
-                  script {
-                    openshift.withCluster() {
-                      openshift.withProject(env.DEV_PROJECT) {
-                        openshift.selector("bc", "tasks").startBuild("--from-file=target/ROOT.war", "--wait=true")
-                      }
-                    }
-                  }
-                }
-              }
-              stage('Deploy DEV') {
-                steps {
-                  script {
-                    openshift.withCluster() {
-                      openshift.withProject(env.DEV_PROJECT) {
-                        openshift.selector("dc", "tasks").rollout().latest();
-                      }
-                    }
-                  }
-                }
-              }
-              stage('Promote to STAGE?') {
-                agent {
-                  label 'skopeo'
-                }
-                steps {
-                  timeout(time:15, unit:'MINUTES') {
-                      input message: "Promote to STAGE?", ok: "Promote"
-                  }
-
-                  script {
-                    openshift.withCluster() {
-                      if (env.ENABLE_QUAY.toBoolean()) {
-                        withCredentials([usernamePassword(credentialsId: "${openshift.project()}-quay-cicd-secret", usernameVariable: "QUAY_USER", passwordVariable: "QUAY_PWD")]) {
-                          sh "skopeo copy docker://quay.io/${QUAY_USERNAME}/${QUAY_REPOSITORY}:latest docker://quay.io/${QUAY_USERNAME}/${QUAY_REPOSITORY}:stage --src-creds \"$QUAY_USER:$QUAY_PWD\" --dest-creds \"$QUAY_USER:$QUAY_PWD\" --src-tls-verify=false --dest-tls-verify=false"
-                        }
-                      } else {
-                        openshift.tag("${env.DEV_PROJECT}/tasks:latest", "${env.STAGE_PROJECT}/tasks:stage")
-                      }
-                    }
-                  }
-                }
-              }
-              stage('Deploy STAGE') {
-                steps {
-                  script {
-                    openshift.withCluster() {
-                      openshift.withProject(env.STAGE_PROJECT) {
-                        openshift.selector("dc", "tasks").rollout().latest();
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-      type: JenkinsPipeline
+# here was the pipeline
 - apiVersion: v1
   kind: ConfigMap
   metadata:
@@ -358,12 +232,14 @@ objects:
             
             sleep 5
 
+            # Sonar
             if [ "${EPHEMERAL}" == "true" ] ; then
               oc new-app -f https://raw.githubusercontent.com/siamaksade/sonarqube/master/sonarqube-template.yml --param=SONARQUBE_MEMORY_LIMIT=6Gi
             else
               oc new-app -f https://raw.githubusercontent.com/siamaksade/sonarqube/master/sonarqube-persistent-template.yml --param=SONARQUBE_MEMORY_LIMIT=6Gi
             fi
 
+            # Che
             if [ "${DEPLOY_CHE}" == "true" ] ; then
               oc process -f https://raw.githubusercontent.com/minishift/minishift/master/addons/che/templates/che-workspace-service-account.yaml \
                   --param SERVICE_ACCOUNT_NAMESPACE=$CICD_NAMESPACE --param=SERVICE_ACCOUNT_NAME=che-workspace | oc create -f -
@@ -377,6 +253,7 @@ objects:
               oc set resources dc/che --limits=cpu=1,memory=2Gi --requests=cpu=200m,memory=512Mi
             fi
 
+            # Nexus
             if [ "${EPHEMERAL}" == "true" ] ; then
               oc new-app -f https://raw.githubusercontent.com/OpenShiftDemos/nexus/master/nexus3-template.yaml --param=NEXUS_VERSION=3.13.0 --param=MAX_MEMORY=2Gi
             else
@@ -385,6 +262,7 @@ objects:
 
             oc set resources dc/nexus --requests=cpu=200m,memory=1Gi --limits=cpu=2,memory=4Gi 
 
+            # Gogs init
             GOGS_SVC=$(oc get svc gogs -o template --template='{{.spec.clusterIP}}')
             GOGS_USER=gogs
             GOGS_PWD=gogs
