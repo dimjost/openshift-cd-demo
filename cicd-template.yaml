@@ -60,7 +60,7 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: default
-# here was the pipeline
+# Here was the Pipeline
 - apiVersion: v1
   kind: ConfigMap
   metadata:
